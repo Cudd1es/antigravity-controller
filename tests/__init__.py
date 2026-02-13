@@ -1,3 +1,1 @@
-"""
-Tests package for Antigravity Controller.
-"""
+"""Tests for Antigravity Controller."""

@@ -1,72 +1,41 @@
-"""
-FastAPI application entry point.
-"""
+"""Application entry point - starts the Discord Bot."""
 
-from contextlib import asynccontextmanager
+import logging
+import sys
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-from controller.api import commands, health, status
-from controller.config import get_settings
-from controller.db.database import init_db
-from controller.websocket.router import router as ws_router
+from controller.bot.client import AntigravityBot
+from controller.bot.commands import setup_commands
+from controller.config import Config
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager for startup and shutdown events."""
-    # Startup
-    settings = get_settings()
-    if settings.debug:
-        print(f"Starting Antigravity Controller on {settings.host}:{settings.port}")
-    await init_db()
-    yield
-    # Shutdown
-    print("Shutting down Antigravity Controller")
-
-
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application."""
-    settings = get_settings()
-
-    app = FastAPI(
-        title="Antigravity Controller",
-        description="Controller service for Antigravity Agent and Mobile App communication",
-        version="0.1.0",
-        lifespan=lifespan,
-        docs_url="/docs" if settings.debug else None,
-        redoc_url="/redoc" if settings.debug else None,
+def main():
+    """Initialize configuration and start the Discord Bot."""
+    # Setup logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
+    logger = logging.getLogger(__name__)
 
-    # CORS middleware for mobile app access
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately in production
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Load config
+    config = Config.from_env()
+    errors = config.validate()
+    if errors:
+        for error in errors:
+            logger.error(f"Configuration error: {error}")
+        logger.error("Please check your .env file. See .env.example for reference.")
+        sys.exit(1)
 
-    # Include routers
-    app.include_router(health.router, tags=["Health"])
-    app.include_router(commands.router, prefix="/api/v1", tags=["Commands"])
-    app.include_router(status.router, prefix="/api/v1", tags=["Status"])
-    app.include_router(ws_router, prefix="/ws/v1", tags=["WebSocket"])
+    # Create and configure bot
+    bot = AntigravityBot(config)
+    setup_commands(bot)
 
-    return app
-
-
-app = create_app()
+    # Run
+    logger.info(f"Starting Antigravity Controller with model: {config.gemini_model}")
+    logger.info(f"Allowed directories: {config.allowed_directories}")
+    bot.run(config.discord_token, log_handler=None)
 
 
 if __name__ == "__main__":
-    import uvicorn
-
-    settings = get_settings()
-    uvicorn.run(
-        "controller.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-    )
+    main()
