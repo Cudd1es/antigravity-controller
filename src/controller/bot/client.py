@@ -101,23 +101,34 @@ class AntigravityBot(commands.Bot):
         # Build agent
         self.agent = Agent(self.config, registry, self.permissions)
 
-        # Sync slash commands if guild ID is configured
-        if self.config.discord_guild_id:
-            guild = discord.Object(id=int(self.config.discord_guild_id))
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            logger.info(f"Synced slash commands to guild {self.config.discord_guild_id}")
-        else:
-            await self.tree.sync()
-            logger.info("Synced slash commands globally")
-
-        logger.info("Antigravity Bot is ready")
+        logger.info("Antigravity Bot initialized, waiting for connection...")
 
     async def on_ready(self):
         """Called when the bot is connected and ready."""
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         logger.info(f"Allowed directories: {self.config.allowed_directories}")
         logger.info(f"Gemini model: {self.config.gemini_model}")
+
+        # Sync slash commands after bot is fully connected
+        try:
+            if self.config.discord_guild_id:
+                guild = discord.Object(id=int(self.config.discord_guild_id))
+                self.tree.copy_global_to(guild=guild)
+                await self.tree.sync(guild=guild)
+                logger.info(f"Synced slash commands to guild {self.config.discord_guild_id}")
+            else:
+                await self.tree.sync()
+                logger.info("Synced slash commands globally")
+        except discord.errors.Forbidden:
+            logger.warning(
+                "Could not sync slash commands (Missing Access). "
+                "Make sure the bot is invited with 'applications.commands' scope. "
+                "Basic message handling will still work."
+            )
+        except Exception as e:
+            logger.warning(f"Slash command sync failed: {e}. Message handling still works.")
+
+        logger.info("Antigravity Bot is ready!")
 
     async def on_message(self, message: discord.Message):
         """Handle incoming messages."""
